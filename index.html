@@ -910,6 +910,7 @@
   function prettyFp(fp) {
     return fp.slice(0, 32).replace(/(.{4})/g, "$1 ").trim();
   }
+  window.__prettyFp = prettyFp;
   async function fpFromJwk(jwk) {
     const raw = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
     const bytes = await crypto.subtle.exportKey("raw", raw);
@@ -996,6 +997,7 @@
         publicKey: await crypto.subtle.importKey("jwk", saved.publicKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]),
         privateKey: await crypto.subtle.importKey("jwk", saved.privateKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["sign"])
       };
+      window.__profile = profile;
       return;
     }
     const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
@@ -1010,6 +1012,7 @@
       fingerprint
     };
     await kvSet("profile", profile);
+    window.__profile = profile;
   }
 
   /* ---------- contacts / TOFU ---------- */
@@ -1419,7 +1422,7 @@
     $("input").focus();
   }
 
-  function closeChat() {
+  async function closeChat() {
     document.body.classList.remove("chat-open");
     currentPeer = null;
     $("chatMain").classList.add("hidden");
@@ -1546,6 +1549,7 @@
     if (!n) return;
     profile.name = n;
     await kvSet("profile", profile);
+    window.__profile = profile;
     closeOverlay("settingsOverlay");
   };
   $("btnCopyFp").onclick = () => copyText(profile.fingerprint);
