@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Чат</title>
+  <script>
+    window.uiInvite = function () {
+      var el = document.getElementById("inviteOverlay");
+      if (!el) return;
+      el.hidden = false;
+      el.inert = false;
+      el.classList.add("show");
+    };
+    window.uiSettings = function () {
+      var el = document.getElementById("settingsOverlay");
+      if (!el) return;
+      var name = document.getElementById("nameInput");
+      var fp = document.getElementById("fpView");
+      if (name && window.__profile) name.value = window.__profile.name || "";
+      if (fp && window.__profile) fp.textContent = window.__prettyFp ? window.__prettyFp(window.__profile.fingerprint) : window.__profile.fingerprint;
+      el.hidden = false;
+      el.inert = false;
+      el.classList.add("show");
+    };
+    window.uiClose = function (id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.classList.remove("show");
+      el.hidden = true;
+      el.inert = true;
+    };
+    document.addEventListener("click", function (e) {
+      var t = e.target;
+      if (!t || !t.closest) return;
+      var closeBtn = t.closest("[data-close]");
+      if (closeBtn) {
+        window.uiClose(closeBtn.getAttribute("data-close"));
+        return;
+      }
+      if (t.closest("#btnInvite") || t.closest("#emptyInvite") || t.closest("#btnChatInvite")) {
+        window.uiInvite();
+        return;
+      }
+      if (t.closest("#btnSettings")) window.uiSettings();
+    });
+  </script>
+  <style>
+    :root {
+      --bg: #f4f4f5;
+      --surface: #ffffff;
+      --text: #18181b;
+      --muted: #71717a;
+      --line: #e4e4e7;
+      --accent: #0f766e;
+      --accent-text: #ffffff;
+      --mine: #0f766e;
+      --mine-text: #ffffff;
+      --theirs: #e4e4e7;
+      --theirs-text: #18181b;
+      --danger: #b91c1c;
+      --banner: #ecfdf5;
+      --banner-text: #115e59;
+      --radius: 12px;
+      --font: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --list-w: 280px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #09090b;
+        --surface: #18181b;
+        --text: #fafafa;
+        --muted: #a1a1aa;
+        --line: #27272a;
+        --accent: #14b8a6;
+        --accent-text: #042f2e;
+        --mine: #0f766e;
+        --mine-text: #f0fdfa;
+        --theirs: #27272a;
+        --theirs-text: #fafafa;
+        --danger: #f87171;
+        --banner: #134e4a;
+        --banner-text: #ccfbf1;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 15px/1.45 var(--font);
+      color: var(--text);
+      background: var(--bg);
+      overflow: hidden;
+    }
+    #shell {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    button, input, textarea {
+      font: inherit;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+      border: 0;
+      background: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: rgba(15, 118, 110, 0.2);
+      pointer-events: auto;
+    }
+    .icon-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      color: var(--text);
+      position: relative;
+      z-index: 3;
+      flex-shrink: 0;
+      font-size: 22px;
+      line-height: 1;
+    }
+    .icon-btn:hover { background: var(--bg); }
+    .app {
+      display: grid;
+      grid-template-columns: var(--list-w) 1fr;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      max-width: 1100px;
+      margin: 0 auto;
+      background: var(--surface);
+    }
+    .banner {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      background: var(--banner);
+      color: var(--banner-text);
+      font-size: 13px;
+    }
+    .banner.show { display: flex; }
+    .banner b { font-weight: 600; }
+    .banner .x { margin-left: auto; color: inherit; opacity: 0.7; padding: 4px 8px; }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+    }
+    .list { border-right: 1px solid var(--line); position: relative; z-index: 1; }
+    .top {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      height: 56px;
+      padding: 0 12px;
+      border-bottom: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .top h1, .top h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 650;
+      letter-spacing: -0.02em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .top h1 { flex: 1; }
+    .top .sub {
+      display: block;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--muted);
+      letter-spacing: 0;
+    }
+    .icon-btn:hover { background: var(--bg); }
+    .chats {
+      flex: 1;
+      overflow: auto;
+    }
+    .empty {
+      padding: 32px 20px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .empty p { margin: 0 0 16px; }
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      width: 100%;
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+    .row:hover { background: var(--bg); }
+    .row.active { background: var(--bg); }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      background: var(--accent);
+      color: var(--accent-text);
+      display: grid;
+      place-items: center;
+      font-weight: 650;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .row .meta { min-width: 0; flex: 1; }
+    .row .name { font-weight: 600; }
+    .row .preview {
+      color: var(--muted);
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .badge {
+      min-width: 20px;
+      padding: 0 6px;
+      height: 20px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-size: 11px;
+      font-weight: 650;
+      display: grid;
+      place-items: center;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .dot.on { background: #16a34a; }
+    .messages {
+      flex: 1;
+      overflow: auto;
+      padding: 16px 16px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .bubble-wrap {
+      display: flex;
+      flex-direction: column;
+      max-width: min(78%, 480px);
+    }
+    .bubble-wrap.mine { align-self: flex-end; align-items: flex-end; }
+    .bubble-wrap.theirs { align-self: flex-start; align-items: flex-start; }
+    .bubble {
+      padding: 8px 12px;
+      border-radius: var(--radius);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .mine .bubble {
+      background: var(--mine);
+      color: var(--mine-text);
+      border-bottom-right-radius: 4px;
+    }
+    .theirs .bubble {
+      background: var(--theirs);
+      color: var(--theirs-text);
+      border-bottom-left-radius: 4px;
+    }
+    .st {
+      font-size: 11px;
+      color: var(--muted);
+      padding: 2px 4px;
+    }
+    .st button {
+      color: var(--accent);
+      padding: 0 4px;
+      font-size: 11px;
+    }
+    .composer {
+      display: flex;
+      gap: 8px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      flex-shrink: 0;
+    }
+    .composer textarea {
+      flex: 1;
+      resize: none;
+      min-height: 44px;
+      max-height: 120px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--bg);
+      outline: none;
+    }
+    .composer textarea:focus { border-color: var(--accent); }
+    .send {
+      height: 44px;
+      padding: 0 16px;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+      align-self: flex-end;
+    }
+    .send:disabled { opacity: 0.4; cursor: default; }
+    .placeholder {
+      flex: 1;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      padding: 24px;
+      text-align: center;
+    }
+    #chatMain {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .overlay:not(.show) {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+      position: absolute !important;
+      width: 0 !important;
+      height: 0 !important;
+      overflow: hidden !important;
+      inset: auto !important;
+      z-index: -1 !important;
+    }
+    .overlay.show {
+      display: flex !important;
+      pointer-events: auto !important;
+      visibility: visible !important;
+      position: fixed !important;
+      inset: 0 !important;
+      width: auto !important;
+      height: auto !important;
+      z-index: 50 !important;
+      align-items: flex-end;
+      justify-content: center;
+      background: rgba(24, 24, 27, 0.35);
+    }
+    .sheet {
+      background: var(--surface);
+      width: min(520px, 100%);
+      max-height: min(92vh, 720px);
+      border-radius: 16px 16px 0 0;
+      padding: 16px 16px 24px;
+      overflow: auto;
+    }
+    .sheet h3 { margin: 0 0 12px; font-size: 17px; }
+    .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+    .tabs button {
+      padding: 8px 12px;
+      border-radius: 10px;
+      background: var(--bg);
+      font-weight: 600;
+      font-size: 13px;
+    }
+    .tabs button.on { background: var(--accent); color: var(--accent-text); }
+    label.field {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin: 12px 0 6px;
+    }
+    textarea.code, input.line {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--bg);
+      padding: 10px 12px;
+      outline: none;
+    }
+    textarea.code {
+      min-height: 96px;
+      resize: vertical;
+      font: 12px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+      word-break: break-all;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .btn {
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: var(--accent-text);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .btn.ghost { background: var(--bg); color: var(--text); }
+    .hint { color: var(--muted); font-size: 13px; margin: 8px 0; }
+    .warn { color: var(--danger); font-size: 13px; margin: 8px 0; }
+    #qrbox {
+      display: none;
+      margin: 12px auto;
+      width: 180px;
+      height: 180px;
+      padding: 8px;
+      background: #fff;
+      border-radius: 12px;
+    }
+    #qrbox.show { display: block; }
+    #qrbox svg { width: 100%; height: 100%; }
+    .fp {
+      font: 12px/1.5 ui-monospace, Consolas, monospace;
+      word-break: break-all;
+      background: var(--bg);
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+    .hidden { display: none !important; }
+    @media (max-width: 799px) {
+      .app { grid-template-columns: 1fr; }
+      .list { border-right: 0; }
+      body.chat-open .list { display: none; }
+      body:not(.chat-open) .chat { display: none; }
+      .sheet { border-radius: 16px 16px 0 0; }
+    }
+    @media (min-width: 800px) {
+      .overlay { align-items: center; }
+      .sheet { border-radius: 16px; padding-bottom: 20px; }
+      .back-btn { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="shell">
+  <div class="banner" id="banner"><span id="bannerText"></span><button class="x" id="bannerClose" type="button" aria-label="Закрыть">✕</button></div>
+  <div class="app" id="app">
+    <section class="pane list" id="listPane">
+      <div class="top">
+        <h1>Чаты</h1>
+        <button class="icon-btn" id="btnInvite" type="button" title="Инвайт" aria-label="Инвайт">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button class="icon-btn" id="btnSettings" type="button" title="Настройки" aria-label="Настройки">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c.3.8 1 1.3 1.9 1.4H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
+      <div class="chats" id="chatList"></div>
+    </section>
+    <section class="pane chat" id="chatPane">
+      <div id="chatMain" class="hidden">
+        <div class="top">
+          <button class="icon-btn back-btn" id="btnBack" type="button" aria-label="Назад">←</button>
+          <div style="flex:1;min-width:0">
+            <h2 id="chatName">Чат</h2>
+            <span class="sub" id="chatStatus">нет соединения</span>
+          </div>
+          <span class="dot" id="connDot"></span>
+          <span class="badge hidden" id="queueBadge">0</span>
+          <button class="icon-btn" id="btnChatInvite" type="button" title="Новый инвайт">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a1 1 0 0 0 1 1h7M16 3h5v5M21 3l-9 9"/></svg>
+          </button>
+        </div>
+        <div class="messages" id="messages"></div>
+        <form class="composer" id="composer">
+          <textarea id="input" rows="1" placeholder="Сообщение" autocomplete="off"></textarea>
+          <button class="send" type="submit">Отправить</button>
+        </form>
+      </div>
+      <div class="placeholder" id="chatPlaceholder">Выберите чат или создайте инвайт</div>
+    </section>
+  </div>
+  </div>
+
+  <div class="overlay" id="inviteOverlay" hidden>
+    <div class="sheet">
+      <div class="top" style="padding:0 0 12px;height:auto;border:0">
+        <h3>Инвайт</h3>
+        <button class="icon-btn" type="button" data-close="inviteOverlay" aria-label="Закрыть">✕</button>
+      </div>
+      <div class="tabs">
+        <button type="button" class="on" id="tabCreate">Создать</button>
+        <button type="button" id="tabAccept">Принять</button>
+      </div>
+      <p class="hint" id="inviteHint">Код — одноразовая сессия WebRTC, не пароль. После закрытия вкладки нужен новый обмен.</p>
+      <div id="createBox">
+        <label class="field" for="offerOut">Ваш инвайт — отправьте собеседнику</label>
+        <textarea class="code" id="offerOut" readonly placeholder="Нажмите «Создать»"></textarea>
+        <div class="actions">
+          <button class="btn" type="button" id="btnMakeOffer">Создать</button>
+          <button class="btn ghost" type="button" id="btnCopyOffer">Скопировать</button>
+        </div>
+        <label class="field" for="answerIn">Ответ собеседника</label>
+        <textarea class="code" id="answerIn" placeholder="Вставьте ответ сюда"></textarea>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btnPasteAnswer">Вставить</button>
+          <button class="btn" type="button" id="btnApplyAnswer">Подключить</button>
+        </div>
+      </div>
+      <div id="acceptBox" class="hidden">
+        <label class="field" for="offerIn">Инвайт собеседника</label>
+        <textarea class="code" id="offerIn" placeholder="Вставьте инвайт"></textarea>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btnPasteOffer">Вставить</button>
+          <button class="btn" type="button" id="btnMakeAnswer">Принять</button>
+        </div>
+        <label class="field" for="answerOut">Ваш ответ — отправьте обратно</label>
+        <textarea class="code" id="answerOut" readonly></textarea>
+        <div class="actions">
+          <button class="btn ghost" type="button" id="btnCopyAnswer">Скопировать</button>
+        </div>
+      </div>
+      <div id="qrbox"></div>
+      <p class="warn hidden" id="inviteErr"></p>
+    </div>
+  </div>
+
+  <div class="overlay" id="settingsOverlay" hidden>
+    <div class="sheet">
+      <div class="top" style="padding:0 0 12px;height:auto;border:0">
+        <h3>Настройки</h3>
+        <button class="icon-btn" type="button" data-close="settingsOverlay" aria-label="Закрыть">✕</button>
+      </div>
+      <label class="field" for="nameInput">Имя на этом устройстве</label>
+      <input class="line" id="nameInput" maxlength="40" />
+      <div class="actions">
+        <button class="btn" type="button" id="btnSaveName">Сохранить</button>
+      </div>
+      <label class="field">Отпечаток ключа</label>
+      <div class="fp" id="fpView"></div>
+      <div class="actions">
+        <button class="btn ghost" type="button" id="btnCopyFp">Скопировать</button>
+      </div>
+      <p class="hint">Ключ никуда не отправляется, кроме инвайта (только публичная часть). Приватный ключ остаётся в браузере.</p>
+    </div>
+  </div>
+
+<script>
+(() => {
+  "use strict";
+
+  const ICE = {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" }
+    ]
+  };
+  const SLOT = new URLSearchParams(location.search).get("as") || "";
+  const DB_NAME = "p2p-chat" + (SLOT ? "-" + SLOT : "");
+  const CONNECT_MS = 15000;
+  const RETRY_MS = 60000;
+
+  let db, profile, keys;
+  let pc = null;
+  let channel = null;
+  let currentPeer = null;
+  let connectedPeer = null;
+  let pendingPeer = null;
+  let tofuWarn = null;
+  let iceTimer = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  function showBanner(text, persistKey) {
+    if (persistKey && sessionStorage.getItem(persistKey)) return;
+    $("bannerText").textContent = text;
+    $("banner").classList.add("show");
+    $("banner").dataset.key = persistKey || "";
+  }
+  $("bannerClose").onclick = () => {
+    if ($("banner").dataset.key) sessionStorage.setItem($("banner").dataset.key, "1");
+    $("banner").classList.remove("show");
+  };
+
+  function isIOS() {
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  }
+
+  /* ---------- QR (byte mode, ECC L) ---------- */
+  const QR = (() => {
+    const EXP = new Uint8Array(512);
+    const LOG = new Uint8Array(256);
+    (function gf() {
+      let x = 1;
+      for (let i = 0; i < 255; i++) {
+        EXP[i] = x;
+        LOG[x] = i;
+        x <<= 1;
+        if (x & 0x100) x ^= 0x11d;
+      }
+      for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+    })();
+    const mul = (a, b) => (a && b ? EXP[LOG[a] + LOG[b]] : 0);
+    const ALIGN = {
+      2:[6,18],3:[6,22],4:[6,26],5:[6,30],6:[6,34],7:[6,22,38],8:[6,24,42],
+      9:[6,26,46],10:[6,28,50],11:[6,30,54],12:[6,32,58],13:[6,34,62],
+      14:[6,26,46,66],15:[6,26,48,70],16:[6,26,50,74],17:[6,30,54,78],
+      18:[6,30,56,82],19:[6,30,58,86],20:[6,34,62,90],21:[6,28,50,72,94],
+      22:[6,26,50,74,98],23:[6,30,54,78,102],24:[6,28,54,80,106],
+      25:[6,32,58,84,110]
+    };
+    // ECC L: [ecPerBlock, group1Blocks, group1Data, group2Blocks, group2Data]
+    const ECL = [
+      null,[7,1,19,0,0],[10,1,34,0,0],[15,1,55,0,0],[20,1,80,0,0],[26,1,108,0,0],
+      [18,2,68,0,0],[20,2,78,0,0],[24,2,97,0,0],[30,2,116,0,0],[18,2,68,2,69],
+      [20,4,81,0,0],[24,2,92,2,93],[26,4,107,0,0],[30,3,115,1,116],[22,5,87,1,88],
+      [24,5,98,1,99],[28,1,107,5,108],[30,5,120,1,121],[28,3,113,4,114],[28,3,107,5,108],
+      [28,4,116,4,117],[28,2,111,7,112],[30,4,121,5,122],[30,6,117,4,118],[30,6,106,6,107]
+    ];
+    function rsGen(n) {
+      let g = [1];
+      for (let i = 0; i < n; i++) {
+        const next = new Array(g.length + 1).fill(0);
+        for (let j = 0; j < g.length; j++) {
+          next[j] ^= g[j];
+          next[j + 1] ^= mul(g[j], EXP[i]);
+        }
+        g = next;
+      }
+      return g;
+    }
+    function rsECC(data, n) {
+      const g = rsGen(n);
+      const buf = new Uint8Array(data.length + n);
+      buf.set(data);
+      for (let i = 0; i < data.length; i++) {
+        const coef = buf[i];
+        if (!coef) continue;
+        for (let j = 0; j < g.length; j++) buf[i + j] ^= mul(g[j], coef);
+      }
+      return buf.slice(data.length);
+    }
+    function bits() {
+      const a = [];
+      return {
+        a,
+        push(val, len) {
+          for (let i = len - 1; i >= 0; i--) a.push((val >>> i) & 1);
+        },
+        bytes() {
+          const out = [];
+          for (let i = 0; i < a.length; i += 8) {
+            let v = 0;
+            for (let j = 0; j < 8 && i + j < a.length; j++) v = (v << 1) | a[i + j];
+            if (a.length - i < 8) v <<= (8 - (a.length - i));
+            out.push(v);
+          }
+          return out;
+        }
+      };
+    }
+    function penalty(mod, size) {
+      let p = 0;
+      const at = (r, c) => (mod[r * size + c] ? 1 : 0);
+      for (let r = 0; r < size; r++) {
+        let run = 1;
+        for (let c = 1; c < size; c++) {
+          if (at(r, c) === at(r, c - 1)) run++;
+          else { if (run >= 5) p += run - 2; run = 1; }
+        }
+        if (run >= 5) p += run - 2;
+      }
+      for (let c = 0; c < size; c++) {
+        let run = 1;
+        for (let r = 1; r < size; r++) {
+          if (at(r, c) === at(r - 1, c)) run++;
+          else { if (run >= 5) p += run - 2; run = 1; }
+        }
+        if (run >= 5) p += run - 2;
+      }
+      for (let r = 0; r < size - 1; r++)
+        for (let c = 0; c < size - 1; c++) {
+          const v = at(r, c);
+          if (v === at(r, c + 1) && v === at(r + 1, c) && v === at(r + 1, c + 1)) p += 3;
+        }
+      const pat = [1,0,1,1,1,0,1,0,0,0,0];
+      const scan = (seq) => {
+        for (let i = 0; i <= seq.length - 11; i++) {
+          let ok1 = true, ok2 = true;
+          for (let j = 0; j < 11; j++) {
+            if (seq[i + j] !== pat[j]) ok1 = false;
+            if (seq[i + j] !== pat[10 - j]) ok2 = false;
+          }
+          if (ok1 || ok2) p += 40;
+        }
+      };
+      for (let r = 0; r < size; r++) {
+        const row = [];
+        for (let c = 0; c < size; c++) row.push(at(r, c));
+        scan(row);
+      }
+      for (let c = 0; c < size; c++) {
+        const col = [];
+        for (let r = 0; r < size; r++) col.push(at(r, c));
+        scan(col);
+      }
+      let dark = 0;
+      for (let i = 0; i < mod.length; i++) if (mod[i]) dark++;
+      p += Math.floor(Math.abs(dark * 20 / mod.length - 10)) * 10;
+      return p;
+    }
+    function maskBit(m, r, c) {
+      switch (m) {
+        case 0: return (r + c) % 2 === 0;
+        case 1: return r % 2 === 0;
+        case 2: return c % 3 === 0;
+        case 3: return (r + c) % 3 === 0;
+        case 4: return (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0;
+        case 5: return (r * c) % 2 + (r * c) % 3 === 0;
+        case 6: return ((r * c) % 2 + (r * c) % 3) % 2 === 0;
+        default: return ((r + c) % 2 + (r * c) % 3) % 2 === 0;
+      }
+    }
+    function formatBits(mask) {
+      let data = (0b01 << 3) | mask;
+      let d = data << 10;
+      const gen = 0b10100110111;
+      for (let i = 14; i >= 10; i--) if ((d >>> i) & 1) d ^= gen << (i - 10);
+      return (data << 10 | d) ^ 0b101010000010010;
+    }
+    function versionBits(v) {
+      let d = v << 12;
+      const gen = 0b1111100100101;
+      for (let i = 17; i >= 12; i--) if ((d >>> i) & 1) d ^= gen << (i - 12);
+      return (v << 12) | d;
+    }
+    function build(data, ver, mask) {
+      const size = ver * 4 + 17;
+      const mod = new Uint8Array(size * size);
+      const res = new Uint8Array(size * size);
+      const set = (r, c, v, locked) => {
+        if (r < 0 || c < 0 || r >= size || c >= size) return;
+        mod[r * size + c] = v ? 1 : 0;
+        if (locked) res[r * size + c] = 1;
+      };
+      const finder = (r0, c0) => {
+        for (let r = -1; r <= 7; r++)
+          for (let c = -1; c <= 7; c++) {
+            const rr = r0 + r, cc = c0 + c;
+            const on = r >= 0 && r <= 6 && c >= 0 && c <= 6 &&
+              (r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4));
+            set(rr, cc, on, true);
+          }
+      };
+      finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+      const ap = ALIGN[ver] || [];
+      for (const r of ap) for (const c of ap) {
+        if ((r < 10 && c < 10) || (r < 10 && c > size - 11) || (r > size - 11 && c < 10)) continue;
+        for (let dr = -2; dr <= 2; dr++)
+          for (let dc = -2; dc <= 2; dc++)
+            set(r + dr, c + dc, Math.max(Math.abs(dr), Math.abs(dc)) !== 1, true);
+      }
+      for (let i = 8; i < size - 8; i++) {
+        set(6, i, i % 2 === 0, true);
+        set(i, 6, i % 2 === 0, true);
+      }
+      set(size - 8, 8, 1, true);
+      if (ver >= 7) {
+        const vb = versionBits(ver);
+        for (let i = 0; i < 18; i++) {
+          const bit = (vb >> i) & 1;
+          const r = Math.floor(i / 3), c = i % 3;
+          set(r, size - 11 + c, bit, true);
+          set(size - 11 + c, r, bit, true);
+        }
+      }
+      let dir = -1, col = size - 1, bitI = 0;
+      const totalBits = data.length * 8;
+      while (col > 0) {
+        if (col === 6) col--;
+        for (let row = 0; row < size; row++) {
+          const r = dir < 0 ? size - 1 - row : row;
+          for (let k = 0; k < 2; k++) {
+            const c = col - k;
+            if (res[r * size + c]) continue;
+            let bit = 0;
+            if (bitI < totalBits) bit = (data[bitI >> 3] >> (7 - (bitI & 7))) & 1;
+            bitI++;
+            if (maskBit(mask, r, c)) bit ^= 1;
+            set(r, c, bit, false);
+          }
+        }
+        dir = -dir;
+        col -= 2;
+      }
+      const fb = formatBits(mask);
+      const pos = [
+        [8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],
+        [7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]
+      ];
+      const pos2 = [];
+      for (let i = 0; i < 8; i++) pos2.push([size - 1 - i, 8]);
+      for (let i = 8; i < 15; i++) pos2.push([8, size - 15 + i]);
+      for (let i = 0; i < 15; i++) {
+        const bit = (fb >> i) & 1;
+        set(pos[i][0], pos[i][1], bit, true);
+        set(pos2[i][0], pos2[i][1], bit, true);
+      }
+      return { mod, size };
+    }
+    function encode(text) {
+      const bytes = new TextEncoder().encode(text);
+      let ver = 0;
+      let info = null;
+      const ccBits = (v) => (v < 10 ? 8 : 16);
+      for (let v = 2; v <= 25; v++) {
+        const e = ECL[v];
+        const cap = e[1] * e[2] + e[3] * e[4];
+        const need = Math.ceil((4 + ccBits(v) + bytes.length * 8 + 4) / 8);
+        if (need <= cap) { ver = v; info = e; break; }
+      }
+      if (!ver) return null;
+      const cap = info[1] * info[2] + info[3] * info[4];
+      const b = bits();
+      b.push(0b0100, 4);
+      b.push(bytes.length, ccBits(ver));
+      for (const x of bytes) b.push(x, 8);
+      const remain = cap * 8 - b.a.length;
+      b.push(0, Math.min(4, remain));
+      while (b.a.length % 8) b.push(0, 1);
+      const pad = [0xec, 0x11];
+      let pi = 0;
+      const data = b.bytes();
+      while (data.length < cap) data.push(pad[pi++ % 2]);
+      const blocks = [];
+      let offset = 0;
+      const groups = [[info[1], info[2]], [info[3], info[4]]];
+      for (const [count, dlen] of groups) {
+        for (let i = 0; i < count; i++) {
+          const chunk = data.slice(offset, offset + dlen);
+          offset += dlen;
+          blocks.push({ d: chunk, e: Array.from(rsECC(chunk, info[0])) });
+        }
+      }
+      const out = [];
+      const maxD = Math.max(...blocks.map((x) => x.d.length));
+      const maxE = info[0];
+      for (let i = 0; i < maxD; i++) for (const bl of blocks) if (i < bl.d.length) out.push(bl.d[i]);
+      for (let i = 0; i < maxE; i++) for (const bl of blocks) out.push(bl.e[i]);
+      let best = null, bestP = Infinity, bestM = 0;
+      for (let m = 0; m < 8; m++) {
+        const built = build(out, ver, m);
+        const p = penalty(built.mod, built.size);
+        if (p < bestP) { bestP = p; best = built; bestM = m; }
+      }
+      return best;
+    }
+    function svg(text) {
+      const q = encode(text);
+      if (!q) return null;
+      const n = q.size;
+      let d = "";
+      for (let r = 0; r < n; r++)
+        for (let c = 0; c < n; c++)
+          if (q.mod[r * n + c]) d += `M${c + 4} ${r + 4}h1v1h-1z`;
+      return `<svg viewBox="0 0 ${n + 8} ${n + 8}" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="#fff"/><path fill="#000" d="${d}"/></svg>`;
+    }
+    return { svg };
+  })();
+
+  /* ---------- bytes / invite ---------- */
+  function b64url(buf) {
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function unb64url(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    const bin = atob(s);
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  async function compress(bytes) {
+    if (typeof CompressionStream === "undefined") return { t: "u", bytes };
+    const cs = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+    return { t: "d", bytes: new Uint8Array(await new Response(cs).arrayBuffer()) };
+  }
+  async function decompress(t, bytes) {
+    if (t === "u") return bytes;
+    if (typeof DecompressionStream === "undefined") throw new Error("Нет декомпрессии в этом браузере");
+    const ds = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(ds).arrayBuffer());
+  }
+  async function encodeInvite(obj) {
+    const json = new TextEncoder().encode(JSON.stringify(obj));
+    const { t, bytes } = await compress(json);
+    return t + "1." + b64url(bytes);
+  }
+  async function decodeInvite(text) {
+    const raw = text.trim().replace(/\s+/g, "");
+    const m = raw.match(/^([du])1\.(.+)$/);
+    if (!m) throw new Error("Неверный инвайт");
+    const bytes = await decompress(m[1], unb64url(m[2]));
+    const obj = JSON.parse(new TextDecoder().decode(bytes));
+    if (!obj || obj.v !== 1 || !obj.s || !obj.k) throw new Error("Повреждённый инвайт");
+    return obj;
+  }
+
+  /* ---------- crypto / profile ---------- */
+  async function sha256(buf) {
+    return new Uint8Array(await crypto.subtle.digest("SHA-256", buf));
+  }
+  function hex(bytes) {
+    return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  function prettyFp(fp) {
+    return fp.slice(0, 32).replace(/(.{4})/g, "$1 ").trim();
+  }
+  async function fpFromJwk(jwk) {
+    const raw = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+    const bytes = await crypto.subtle.exportKey("raw", raw);
+    return hex(await sha256(new Uint8Array(bytes)));
+  }
+  async function exportPk() {
+    const raw = await crypto.subtle.exportKey("raw", keys.publicKey);
+    return b64url(raw);
+  }
+  async function importPk(b64) {
+    const raw = unb64url(b64);
+    return crypto.subtle.importKey("raw", raw, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+  }
+
+  function idbReq(req) {
+    return new Promise((res, rej) => {
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+  function txDone(tx) {
+    return new Promise((res, rej) => {
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+      tx.onabort = () => rej(tx.error);
+    });
+  }
+  function openDb() {
+    return new Promise((res, rej) => {
+      if (!window.indexedDB) {
+        rej(new Error("IndexedDB недоступен"));
+        return;
+      }
+      const r = indexedDB.open(DB_NAME, 1);
+      const timer = setTimeout(function () { rej(new Error("IndexedDB не ответил")); }, 2500);
+      r.onupgradeneeded = () => {
+        const d = r.result;
+        if (!d.objectStoreNames.contains("kv")) d.createObjectStore("kv");
+        if (!d.objectStoreNames.contains("contacts")) d.createObjectStore("contacts", { keyPath: "fingerprint" });
+        if (!d.objectStoreNames.contains("messages")) {
+          const s = d.createObjectStore("messages", { keyPath: "id" });
+          s.createIndex("peer", "peer");
+        }
+        if (!d.objectStoreNames.contains("seenIds")) d.createObjectStore("seenIds", { keyPath: "id" });
+        if (!d.objectStoreNames.contains("queue")) d.createObjectStore("queue", { keyPath: "id" });
+      };
+      r.onsuccess = () => { clearTimeout(timer); res(r.result); };
+      r.onerror = () => { clearTimeout(timer); rej(r.error); };
+    });
+  }
+  async function kvGet(key) {
+    return idbReq(db.transaction("kv").objectStore("kv").get(key));
+  }
+  async function kvSet(key, val) {
+    const tx = db.transaction("kv", "readwrite");
+    tx.objectStore("kv").put(val, key);
+    await txDone(tx);
+  }
+  async function storeGet(name, key) {
+    return idbReq(db.transaction(name).objectStore(name).get(key));
+  }
+  async function storePut(name, val) {
+    const tx = db.transaction(name, "readwrite");
+    tx.objectStore(name).put(val);
+    await txDone(tx);
+  }
+  async function storeDel(name, key) {
+    const tx = db.transaction(name, "readwrite");
+    tx.objectStore(name).delete(key);
+    await txDone(tx);
+  }
+  async function storeAll(name) {
+    return idbReq(db.transaction(name).objectStore(name).getAll());
+  }
+  async function msgsFor(peer) {
+    return idbReq(db.transaction("messages").objectStore("messages").index("peer").getAll(peer));
+  }
+
+  async function loadOrCreateProfile() {
+    const saved = await kvGet("profile");
+    if (saved && saved.publicKeyJwk) {
+      profile = saved;
+      keys = {
+        publicKey: await crypto.subtle.importKey("jwk", saved.publicKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]),
+        privateKey: await crypto.subtle.importKey("jwk", saved.privateKeyJwk, { name: "ECDSA", namedCurve: "P-256" }, true, ["sign"])
+      };
+      return;
+    }
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    keys = pair;
+    const publicKeyJwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
+    const privateKeyJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+    const fingerprint = await fpFromJwk(publicKeyJwk);
+    profile = {
+      name: "Гость-" + fingerprint.slice(0, 4).toUpperCase(),
+      publicKeyJwk,
+      privateKeyJwk,
+      fingerprint
+    };
+    await kvSet("profile", profile);
+  }
+
+  /* ---------- contacts / TOFU ---------- */
+  async function upsertContact(fp, name, pk, { warnIfNameTaken = true } = {}) {
+    const existing = await storeGet("contacts", fp);
+    if (!existing && warnIfNameTaken && name) {
+      const all = await storeAll("contacts");
+      const clash = all.find((c) => c.name === name && c.fingerprint !== fp);
+      if (clash) tofuWarn = { name, old: clash.fingerprint, neu: fp };
+    }
+    const contact = existing || { fingerprint: fp, name: name || fp.slice(0, 8), pubKey: pk, createdAt: Date.now() };
+    if (name) contact.name = name;
+    if (pk) contact.pubKey = pk;
+    contact.lastAt = Date.now();
+    await storePut("contacts", contact);
+    return contact;
+  }
+
+  /* ---------- WebRTC ---------- */
+  function closePc() {
+    if (iceTimer) { clearTimeout(iceTimer); iceTimer = null; }
+    if (channel) { try { channel.close(); } catch (_) {} }
+    if (pc) { try { pc.close(); } catch (_) {} }
+    channel = null;
+    pc = null;
+    connectedPeer = null;
+    updateChatHeader();
+  }
+
+  function waitIceComplete(peer) {
+    if (peer.iceGatheringState === "complete") return Promise.resolve();
+    return new Promise((resolve) => {
+      const done = () => {
+        peer.removeEventListener("icegatheringstatechange", on);
+        resolve();
+      };
+      const on = () => { if (peer.iceGatheringState === "complete") done(); };
+      peer.addEventListener("icegatheringstatechange", on);
+      setTimeout(done, 8000);
+    });
+  }
+
+  function hookPc(peer) {
+    peer.onconnectionstatechange = () => {
+    if (peer.connectionState === "connected") {
+        if (iceTimer) { clearTimeout(iceTimer); iceTimer = null; }
+      }
+      if (peer.connectionState === "failed") {
+        showBanner("Не удалось установить P2P. В сложных сетях нужен TURN.", "turn");
+        markSendingAsError();
+        connectedPeer = null;
+        updateChatHeader();
+      }
+      if (peer.connectionState === "disconnected" || peer.connectionState === "closed") {
+        if (connectedPeer) showBanner("Канал закрылся. Нужен новый инвайт, чтобы писать дальше.");
+        connectedPeer = null;
+        channel = null;
+        updateChatHeader();
+      }
+      updateChatHeader();
+    };
+    peer.oniceconnectionstatechange = () => {
+      if (peer.iceConnectionState === "failed") {
+        showBanner("Не удалось установить P2P. В сложных сетях нужен TURN.", "turn");
+      }
+    };
+  }
+
+  function setupChannel(ch) {
+    channel = ch;
+    ch.binaryType = "arraybuffer";
+    ch.onopen = async () => {
+      if (iceTimer) { clearTimeout(iceTimer); iceTimer = null; }
+      connectedPeer = pendingPeer;
+      if (connectedPeer) {
+        currentPeer = connectedPeer;
+        await openChat(currentPeer);
+      }
+      sendHello();
+      await flushQueue();
+      updateChatHeader();
+      await renderList();
+      closeOverlay("inviteOverlay");
+    };
+    ch.onclose = () => {
+      channel = null;
+      connectedPeer = null;
+      updateChatHeader();
+    };
+    ch.onerror = () => {};
+    ch.onmessage = (ev) => { handleIncoming(ev.data); };
+  }
+
+  function sendRaw(obj) {
+    if (!channel || channel.readyState !== "open") return false;
+    channel.send(JSON.stringify(obj));
+    return true;
+  }
+
+  function sendHello() {
+    sendRaw({ type: "hello", name: profile.name, fp: profile.fingerprint });
+  }
+
+  function startConnectTimer() {
+    if (iceTimer) clearTimeout(iceTimer);
+    iceTimer = setTimeout(() => {
+      if (!channel || channel.readyState !== "open") {
+        showBanner("Соединение не установилось за 15 секунд. Попробуйте новый инвайт или TURN.");
+        markSendingAsError();
+      }
+    }, CONNECT_MS);
+  }
+
+  async function makeOffer() {
+    closePc();
+    setInviteErr("");
+    $("offerOut").value = "Собираю адрес сети…";
+    $("qrbox").classList.remove("show");
+    pc = new RTCPeerConnection(ICE);
+    hookPc(pc);
+    const ch = pc.createDataChannel("chat", { ordered: true });
+    setupChannel(ch);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitIceComplete(pc);
+    const payload = {
+      v: 1,
+      t: "o",
+      n: profile.name,
+      k: await exportPk(),
+      fp: profile.fingerprint,
+      s: pc.localDescription.sdp
+    };
+    const blob = await encodeInvite(payload);
+    $("offerOut").value = blob;
+    drawQr(blob);
+  }
+
+  async function applyAnswer() {
+    setInviteErr("");
+    if (!pc) throw new Error("Сначала создайте инвайт");
+    const inv = await decodeInvite($("answerIn").value);
+    if (inv.t !== "a") throw new Error("Это не ответ, а инвайт");
+    await importPk(inv.k);
+    const fp = inv.fp || await fpFromImported(inv.k);
+    await maybeTofu(fp, inv.n, inv.k);
+    pendingPeer = fp;
+    await pc.setRemoteDescription({ type: "answer", sdp: inv.s });
+    startConnectTimer();
+  }
+
+  async function fpFromImported(k) {
+    const key = await importPk(k);
+    const raw = await crypto.subtle.exportKey("raw", key);
+    return hex(await sha256(new Uint8Array(raw)));
+  }
+
+  async function makeAnswer() {
+    closePc();
+    setInviteErr("");
+    $("answerOut").value = "Собираю адрес сети…";
+    const inv = await decodeInvite($("offerIn").value);
+    if (inv.t !== "o") throw new Error("Это не инвайт (оффер)");
+    await importPk(inv.k);
+    const fp = inv.fp || await fpFromImported(inv.k);
+    await maybeTofu(fp, inv.n, inv.k);
+    pendingPeer = fp;
+    pc = new RTCPeerConnection(ICE);
+    hookPc(pc);
+    pc.ondatachannel = (e) => setupChannel(e.channel);
+    await pc.setRemoteDescription({ type: "offer", sdp: inv.s });
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    await waitIceComplete(pc);
+    const payload = {
+      v: 1,
+      t: "a",
+      n: profile.name,
+      k: await exportPk(),
+      fp: profile.fingerprint,
+      s: pc.localDescription.sdp
+    };
+    const blob = await encodeInvite(payload);
+    $("answerOut").value = blob;
+    drawQr(blob);
+  }
+
+  async function maybeTofu(fp, name, pk) {
+    const all = await storeAll("contacts");
+    const clash = all.find((c) => c.name === name && c.fingerprint !== fp);
+    await upsertContact(fp, name, pk);
+    if (clash) {
+      tofuWarn = { name, old: clash.fingerprint };
+      showBanner("Ключ для имени «" + name + "» другой. Это может быть другой человек.");
+    }
+  }
+
+  function drawQr(text) {
+    const svg = QR.svg(text);
+    const box = $("qrbox");
+    if (!svg) {
+      box.classList.remove("show");
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = svg;
+    box.classList.add("show");
+  }
+
+  function setInviteErr(msg) {
+    const el = $("inviteErr");
+    el.textContent = msg;
+    el.classList.toggle("hidden", !msg);
+  }
+
+  /* ---------- messages ---------- */
+  async function handleIncoming(data) {
+    let obj;
+    try { obj = JSON.parse(data); } catch (e) { return; }
+    if (obj.type === "hello") {
+      if (obj.fp) {
+        pendingPeer = obj.fp;
+        connectedPeer = obj.fp;
+        currentPeer = obj.fp;
+        await upsertContact(obj.fp, obj.name, null, { warnIfNameTaken: true });
+        if (tofuWarn && tofuWarn.name === obj.name) {
+          showBanner("Ключ для имени «" + obj.name + "» другой. Это может быть другой человек.");
+        }
+        await openChat(obj.fp);
+        await flushQueue();
+        updateChatHeader();
+        await renderList();
+      }
+      return;
+    }
+    if (obj.type === "ack" && obj.id) {
+      const msg = await storeGet("messages", obj.id);
+      if (msg) {
+        msg.status = "delivered";
+        await storePut("messages", msg);
+      }
+      await storeDel("queue", obj.id);
+      await renderMessages();
+      await renderList();
+      return;
+    }
+    if (obj.type === "msg" && obj.id && obj.text != null) {
+      const seen = await storeGet("seenIds", obj.id);
+      sendRaw({ type: "ack", id: obj.id });
+      if (seen) return;
+      const peer = obj.from || connectedPeer;
+      if (!peer) return;
+      await storePut("seenIds", { id: obj.id });
+      const msg = {
+        id: obj.id,
+        peer,
+        from: obj.from,
+        to: profile.fingerprint,
+        text: String(obj.text).slice(0, 16000),
+        ts: obj.ts || Date.now(),
+        dir: "in",
+        status: "delivered"
+      };
+      await storePut("messages", msg);
+      await upsertContact(peer, null, null, { warnIfNameTaken: false });
+      const c = await storeGet("contacts", peer);
+      if (c) { c.lastAt = msg.ts; await storePut("contacts", c); }
+      if (currentPeer === peer) await renderMessages();
+      await renderList();
+    }
+  }
+
+  async function enqueueSend(text) {
+    if (!currentPeer) return;
+    const id = crypto.randomUUID();
+    const msg = {
+      id,
+      peer: currentPeer,
+      from: profile.fingerprint,
+      to: currentPeer,
+      text,
+      ts: Date.now(),
+      dir: "out",
+      status: channel && channel.readyState === "open" && connectedPeer === currentPeer ? "sending" : "pending"
+    };
+    await storePut("messages", msg);
+    await storePut("queue", { id, peer: currentPeer, ts: msg.ts });
+    const c = await storeGet("contacts", currentPeer);
+    if (c) { c.lastAt = msg.ts; await storePut("contacts", c); }
+    await renderMessages();
+    await renderList();
+    await trySend(msg);
+  }
+
+  async function trySend(msg) {
+    if (!channel || channel.readyState !== "open" || connectedPeer !== msg.peer) {
+      msg.status = "pending";
+      await storePut("messages", msg);
+      await renderMessages();
+      return;
+    }
+    msg.status = "sending";
+    await storePut("messages", msg);
+    const ok = sendRaw({ type: "msg", id: msg.id, from: msg.from, to: msg.to, text: msg.text, ts: msg.ts });
+    if (!ok) {
+      msg.status = "error";
+      await storePut("messages", msg);
+    }
+    await renderMessages();
+  }
+
+  async function flushQueue() {
+    if (!connectedPeer || !channel || channel.readyState !== "open") return;
+    const all = await storeAll("queue");
+    const mine = all.filter((q) => q.peer === connectedPeer).sort((a, b) => a.ts - b.ts);
+    for (const q of mine) {
+      const msg = await storeGet("messages", q.id);
+      if (msg && msg.status !== "delivered") await trySend(msg);
+    }
+  }
+
+  async function markSendingAsError() {
+    const all = await storeAll("messages");
+    for (const m of all) {
+      if (m.dir === "out" && m.status === "sending") {
+        m.status = "error";
+        await storePut("messages", m);
+      }
+    }
+    await renderMessages();
+  }
+
+  async function cancelMsg(id) {
+    await storeDel("messages", id);
+    await storeDel("queue", id);
+    await renderMessages();
+    await renderList();
+  }
+
+  async function retryMsg(id) {
+    const msg = await storeGet("messages", id);
+    if (!msg) return;
+    msg.status = "pending";
+    await storePut("messages", msg);
+    await storePut("queue", { id, peer: msg.peer, ts: msg.ts });
+    await trySend(msg);
+    await renderMessages();
+  }
+
+  /* ---------- UI ---------- */
+  function initials(name) {
+    const s = (name || "?").trim();
+    return s.slice(0, 2).toUpperCase();
+  }
+  function statusLabel(s) {
+    return { pending: "ожидает", sending: "отправляется", delivered: "доставлено", error: "ошибка" }[s] || s;
+  }
+
+  async function renderList() {
+    const box = $("chatList");
+    if (!box) return;
+    if (!db) {
+      box.innerHTML = "<div class=\"empty\"><p>Создайте или примите инвайт</p><button class=\"btn\" type=\"button\" id=\"emptyInvite\">Инвайт</button></div>";
+      return;
+    }
+    const contacts = (await storeAll("contacts")).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
+    if (!contacts.length) {
+      box.innerHTML = `<div class="empty"><p>Создайте или примите инвайт</p><button class="btn" type="button" id="emptyInvite">Инвайт</button></div>`;
+      const b = $("emptyInvite");
+      if (b) b.onclick = () => openOverlay("inviteOverlay");
+      return;
+    }
+    const parts = [];
+    for (const c of contacts) {
+      const msgs = await msgsFor(c.fingerprint);
+      msgs.sort((a, b) => a.ts - b.ts);
+      const last = msgs[msgs.length - 1];
+      const pending = msgs.filter((m) => m.dir === "out" && m.status !== "delivered").length;
+      const active = currentPeer === c.fingerprint ? " active" : "";
+      parts.push(`<button class="row${active}" type="button" data-peer="${c.fingerprint}">
+        <div class="avatar">${esc(initials(c.name))}</div>
+        <div class="meta"><div class="name">${esc(c.name)}</div>
+        <div class="preview">${esc(last ? last.text : "Нет сообщений")}</div></div>
+        ${pending ? `<span class="badge">${pending}</span>` : ""}
+      </button>`);
+    }
+    box.innerHTML = parts.join("");
+    box.querySelectorAll("[data-peer]").forEach((el) => {
+      el.onclick = () => openChat(el.dataset.peer);
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c]));
+  }
+
+  async function openChat(fp) {
+    currentPeer = fp;
+    document.body.classList.add("chat-open");
+    $("chatMain").classList.remove("hidden");
+    $("chatPlaceholder").classList.add("hidden");
+    const c = await storeGet("contacts", fp);
+    $("chatName").textContent = c ? c.name : fp.slice(0, 8);
+    updateChatHeader();
+    await renderMessages();
+    await renderList();
+    $("input").focus();
+  }
+
+  function closeChat() {
+    document.body.classList.remove("chat-open");
+    currentPeer = null;
+    $("chatMain").classList.add("hidden");
+    $("chatPlaceholder").classList.remove("hidden");
+    await renderList();
+  }
+
+  function updateChatHeader() {
+    const st = $("chatStatus");
+    const dot = $("connDot");
+    if (!st || !dot) return;
+    const live = channel && channel.readyState === "open" && connectedPeer && connectedPeer === currentPeer;
+    st.textContent = live ? "канал открыт" : "нет соединения";
+    dot.classList.toggle("on", !!live);
+    updateQueueBadge();
+  }
+
+  async function updateQueueBadge() {
+    const badge = $("queueBadge");
+    if (!currentPeer) { badge.classList.add("hidden"); return; }
+    const msgs = await msgsFor(currentPeer);
+    const n = msgs.filter((m) => m.dir === "out" && m.status !== "delivered").length;
+    badge.textContent = String(n);
+    badge.classList.toggle("hidden", n === 0);
+  }
+
+  async function renderMessages() {
+    const box = $("messages");
+    if (!currentPeer) return;
+    const msgs = (await msgsFor(currentPeer)).sort((a, b) => a.ts - b.ts);
+    box.innerHTML = msgs.map((m) => {
+      const mine = m.dir === "out";
+      let actions = "";
+      if (mine && m.status !== "delivered") {
+        actions = `<button type="button" data-act="retry" data-id="${m.id}">повторить</button>
+                   <button type="button" data-act="cancel" data-id="${m.id}">отменить</button>`;
+      }
+      return `<div class="bubble-wrap ${mine ? "mine" : "theirs"}">
+        <div class="bubble">${esc(m.text)}</div>
+        ${mine ? `<div class="st">${statusLabel(m.status)} ${actions}</div>` : ""}
+      </div>`;
+    }).join("");
+    box.querySelectorAll("[data-act]").forEach((el) => {
+      el.onclick = () => {
+        if (el.dataset.act === "cancel") cancelMsg(el.dataset.id);
+        if (el.dataset.act === "retry") retryMsg(el.dataset.id);
+      };
+    });
+    box.scrollTop = box.scrollHeight;
+    updateQueueBadge();
+  }
+
+  function openOverlay(id) {
+    const el = $(id);
+    el.hidden = false;
+    el.classList.add("show");
+  }
+  function closeOverlay(id) {
+    const el = $(id);
+    el.classList.remove("show");
+    el.hidden = true;
+  }
+
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); }
+    catch (e) {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+  }
+  async function pasteInto(el) {
+    try {
+      el.value = await navigator.clipboard.readText();
+    } catch (e) {
+      el.focus();
+    }
+  }
+
+  /* ---------- events ---------- */
+  $("btnInvite").addEventListener("click", function (e) { e.preventDefault(); openOverlay("inviteOverlay"); });
+  $("btnChatInvite").addEventListener("click", function (e) { e.preventDefault(); openOverlay("inviteOverlay"); });
+  $("btnSettings").addEventListener("click", function (e) {
+    e.preventDefault();
+    $("nameInput").value = (profile && profile.name) || "";
+    $("fpView").textContent = profile ? prettyFp(profile.fingerprint) : "ключ ещё не создан";
+    openOverlay("settingsOverlay");
+  });
+  $("btnBack").onclick = closeChat;
+  document.querySelectorAll("[data-close]").forEach((el) => {
+    el.onclick = () => closeOverlay(el.dataset.close);
+  });
+  $("inviteOverlay").addEventListener("click", (e) => { if (e.target === $("inviteOverlay")) closeOverlay("inviteOverlay"); });
+  $("settingsOverlay").addEventListener("click", (e) => { if (e.target === $("settingsOverlay")) closeOverlay("settingsOverlay"); });
+
+  $("tabCreate").onclick = () => {
+    $("tabCreate").classList.add("on");
+    $("tabAccept").classList.remove("on");
+    $("createBox").classList.remove("hidden");
+    $("acceptBox").classList.add("hidden");
+    if ($("offerOut").value) drawQr($("offerOut").value);
+  };
+  $("tabAccept").onclick = () => {
+    $("tabAccept").classList.add("on");
+    $("tabCreate").classList.remove("on");
+    $("acceptBox").classList.remove("hidden");
+    $("createBox").classList.add("hidden");
+    if ($("answerOut").value) drawQr($("answerOut").value);
+  };
+
+  $("btnMakeOffer").onclick = () => makeOffer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnCopyOffer").onclick = () => copyText($("offerOut").value);
+  $("btnPasteAnswer").onclick = () => pasteInto($("answerIn"));
+  $("btnApplyAnswer").onclick = () => applyAnswer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnPasteOffer").onclick = () => pasteInto($("offerIn"));
+  $("btnMakeAnswer").onclick = () => makeAnswer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnCopyAnswer").onclick = () => copyText($("answerOut").value);
+
+  $("btnSaveName").onclick = async () => {
+    const n = $("nameInput").value.trim().slice(0, 40);
+    if (!n) return;
+    profile.name = n;
+    await kvSet("profile", profile);
+    closeOverlay("settingsOverlay");
+  };
+  $("btnCopyFp").onclick = () => copyText(profile.fingerprint);
+
+  $("composer").onsubmit = async (e) => {
+    e.preventDefault();
+    const text = $("input").value.trim();
+    if (!text || !currentPeer) return;
+    $("input").value = "";
+    $("input").style.height = "auto";
+    await enqueueSend(text);
+  };
+  $("input").addEventListener("input", () => {
+    const el = $("input");
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 120) + "px";
+  });
+  $("input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if ($("composer").requestSubmit) $("composer").requestSubmit();
+      else $("composer").dispatchEvent(new Event("submit", { cancelable: true }));
+    }
+  });
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      if (pc && (!channel || channel.readyState !== "open")) {
+        showBanner("Канал не активен. Чтобы писать, обменяйтесь новым инвайтом.");
+      }
+      flushQueue();
+    }
+  });
+  setInterval(() => { flushQueue(); }, RETRY_MS);
+
+  /* ---------- boot ---------- */
+  async function boot() {
+    try {
+      if (!window.isSecureContext || !crypto.subtle) {
+        showBanner("С file:// этот браузер блокирует ключи и WebRTC. Откройте через http://localhost — см. README.");
+        await renderList();
+        return;
+      }
+      db = await openDb();
+      await loadOrCreateProfile();
+      await renderList();
+      if (isIOS()) showBanner("На iOS браузер не работает в фоне. Оставьте вкладку открытой.", "ios");
+    } catch (e) {
+      showBanner("Ошибка запуска: " + (e && e.message ? e.message : String(e)));
+      try { await renderList(); } catch (e2) {}
+    }
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
