@@ -558,6 +558,9 @@
   let pendingPeer = null;
   let tofuWarn = null;
   let iceTimer = null;
+  let rtcBusy = false;
+  let answerApplied = false;
+  let pcGen = 0;
 
   const $ = (id) => document.getElementById(id);
 
@@ -1126,42 +1129,101 @@
     }, CONNECT_MS);
   }
 
+  function pcAlive(peer) {
+    return peer && peer.signalingState !== "closed";
+  }
+
+  function alreadyHasAnswer(peer) {
+    return pcAlive(peer) && !!(peer.currentRemoteDescription || peer.remoteDescription);
+  }
+
+  function friendlyRtc(e) {
+    const msg = e && e.message ? e.message : String(e);
+    if (/wrong state:\s*stable/i.test(msg) || (e && e.name === "InvalidStateError")) {
+      if (alreadyHasAnswer(pc)) return "";
+      return "Этот инвайт уже использован. Создайте новый.";
+    }
+    return msg;
+  }
+
   async function makeOffer() {
-    closePc();
-    setInviteErr("");
-    $("offerOut").value = "Собираю адрес сети…";
-    $("qrbox").classList.remove("show");
-    pc = new RTCPeerConnection(ICE);
-    hookPc(pc);
-    const ch = pc.createDataChannel("chat", { ordered: true });
-    setupChannel(ch);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitIceComplete(pc);
-    const payload = {
-      v: 1,
-      t: "o",
-      n: profile.name,
-      k: await exportPk(),
-      fp: profile.fingerprint,
-      s: pc.localDescription.sdp
-    };
-    const blob = await encodeInvite(payload);
-    $("offerOut").value = blob;
-    drawQr(blob);
+    if (rtcBusy) return;
+    rtcBusy = true;
+    try {
+      closePc();
+      answerApplied = false;
+      setInviteErr("");
+      $("offerOut").value = "Собираю адрес сети…";
+      $("answerIn").value = "";
+      $("qrbox").classList.remove("show");
+      const gen = ++pcGen;
+      const peer = new RTCPeerConnection(ICE);
+      pc = peer;
+      hookPc(peer);
+      const ch = peer.createDataChannel("chat", { ordered: true });
+      setupChannel(ch);
+      const offer = await peer.createOffer();
+      if (gen !== pcGen || pc !== peer) return;
+      await peer.setLocalDescription(offer);
+      if (gen !== pcGen || pc !== peer) return;
+      await waitIceComplete(peer);
+      if (gen !== pcGen || pc !== peer || !peer.localDescription) return;
+      const payload = {
+        v: 1,
+        t: "o",
+        n: profile.name,
+        k: await exportPk(),
+        fp: profile.fingerprint,
+        s: peer.localDescription.sdp
+      };
+      const blob = await encodeInvite(payload);
+      if (gen !== pcGen || pc !== peer) return;
+      $("offerOut").value = blob;
+      drawQr(blob);
+    } finally {
+      rtcBusy = false;
+    }
   }
 
   async function applyAnswer() {
+    if (answerApplied || alreadyHasAnswer(pc)) {
+      if (alreadyHasAnswer(pc)) startConnectTimer();
+      return;
+    }
+    if (rtcBusy) throw new Error("Подождите, инвайт ещё собирается.");
+    if (!pcAlive(pc)) throw new Error("Сначала создайте инвайт");
+    if (pc.signalingState !== "have-local-offer") {
+      throw new Error("Сначала создайте инвайт и дождитесь кода, потом вставьте ответ.");
+    }
+    rtcBusy = true;
+    answerApplied = true;
     setInviteErr("");
-    if (!pc) throw new Error("Сначала создайте инвайт");
-    const inv = await decodeInvite($("answerIn").value);
-    if (inv.t !== "a") throw new Error("Это не ответ, а инвайт");
-    await importPk(inv.k);
-    const fp = inv.fp || await fpFromImported(inv.k);
-    await maybeTofu(fp, inv.n, inv.k);
-    pendingPeer = fp;
-    await pc.setRemoteDescription({ type: "answer", sdp: inv.s });
-    startConnectTimer();
+    try {
+      const inv = await decodeInvite($("answerIn").value);
+      if (inv.t !== "a") throw new Error("Это не ответ, а инвайт");
+      await importPk(inv.k);
+      const fp = inv.fp || await fpFromImported(inv.k);
+      await maybeTofu(fp, inv.n, inv.k);
+      pendingPeer = fp;
+      if (!pcAlive(pc)) throw new Error("Соединение сбросилось. Создайте новый инвайт.");
+      if (alreadyHasAnswer(pc)) return;
+      if (pc.signalingState !== "have-local-offer") {
+        throw new Error("Этот инвайт уже использован. Создайте новый.");
+      }
+      await pc.setRemoteDescription({ type: "answer", sdp: inv.s });
+      startConnectTimer();
+    } catch (e) {
+      if (alreadyHasAnswer(pc)) {
+        startConnectTimer();
+        return;
+      }
+      answerApplied = false;
+      const msg = friendlyRtc(e);
+      if (!msg) return;
+      throw new Error(msg);
+    } finally {
+      rtcBusy = false;
+    }
   }
 
   async function fpFromImported(k) {
@@ -1171,33 +1233,46 @@
   }
 
   async function makeAnswer() {
-    closePc();
-    setInviteErr("");
-    $("answerOut").value = "Собираю адрес сети…";
-    const inv = await decodeInvite($("offerIn").value);
-    if (inv.t !== "o") throw new Error("Это не инвайт (оффер)");
-    await importPk(inv.k);
-    const fp = inv.fp || await fpFromImported(inv.k);
-    await maybeTofu(fp, inv.n, inv.k);
-    pendingPeer = fp;
-    pc = new RTCPeerConnection(ICE);
-    hookPc(pc);
-    pc.ondatachannel = (e) => setupChannel(e.channel);
-    await pc.setRemoteDescription({ type: "offer", sdp: inv.s });
-    const answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    await waitIceComplete(pc);
-    const payload = {
-      v: 1,
-      t: "a",
-      n: profile.name,
-      k: await exportPk(),
-      fp: profile.fingerprint,
-      s: pc.localDescription.sdp
-    };
-    const blob = await encodeInvite(payload);
-    $("answerOut").value = blob;
-    drawQr(blob);
+    if (rtcBusy) return;
+    rtcBusy = true;
+    try {
+      setInviteErr("");
+      const inv = await decodeInvite($("offerIn").value);
+      if (inv.t !== "o") throw new Error("Это не инвайт (оффер)");
+      await importPk(inv.k);
+      const fp = inv.fp || await fpFromImported(inv.k);
+      await maybeTofu(fp, inv.n, inv.k);
+      pendingPeer = fp;
+      $("answerOut").value = "Собираю адрес сети…";
+      $("qrbox").classList.remove("show");
+      closePc();
+      answerApplied = false;
+      const gen = ++pcGen;
+      const peer = new RTCPeerConnection(ICE);
+      pc = peer;
+      hookPc(peer);
+      peer.ondatachannel = (e) => setupChannel(e.channel);
+      await peer.setRemoteDescription({ type: "offer", sdp: inv.s });
+      if (gen !== pcGen || pc !== peer) return;
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      await waitIceComplete(peer);
+      if (gen !== pcGen || pc !== peer || !peer.localDescription) return;
+      const payload = {
+        v: 1,
+        t: "a",
+        n: profile.name,
+        k: await exportPk(),
+        fp: profile.fingerprint,
+        s: peer.localDescription.sdp
+      };
+      const blob = await encodeInvite(payload);
+      if (gen !== pcGen || pc !== peer) return;
+      $("answerOut").value = blob;
+      drawQr(blob);
+    } finally {
+      rtcBusy = false;
+    }
   }
 
   async function maybeTofu(fp, name, pk) {
@@ -1536,12 +1611,12 @@
     if ($("answerOut").value) drawQr($("answerOut").value);
   };
 
-  $("btnMakeOffer").onclick = () => makeOffer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnMakeOffer").onclick = () => makeOffer().catch((e) => { const m = friendlyRtc(e); if (m) setInviteErr(m); });
   $("btnCopyOffer").onclick = () => copyText($("offerOut").value);
   $("btnPasteAnswer").onclick = () => pasteInto($("answerIn"));
-  $("btnApplyAnswer").onclick = () => applyAnswer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnApplyAnswer").onclick = () => applyAnswer().catch((e) => { const m = friendlyRtc(e); if (m) setInviteErr(m); });
   $("btnPasteOffer").onclick = () => pasteInto($("offerIn"));
-  $("btnMakeAnswer").onclick = () => makeAnswer().catch((e) => setInviteErr(e.message || String(e)));
+  $("btnMakeAnswer").onclick = () => makeAnswer().catch((e) => { const m = friendlyRtc(e); if (m) setInviteErr(m); });
   $("btnCopyAnswer").onclick = () => copyText($("answerOut").value);
 
   $("btnSaveName").onclick = async () => {
